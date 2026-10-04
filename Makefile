@@ -39,7 +39,7 @@ test: ## pytest (unit tests + table contracts + extensions)
 
 dbt: ## dbt track: land Bronze, dbt build (merge + microbatch + unit test)
 	@$(PY) main.py --land-only > /dev/null
-	cd dbt_project && DBT_PROFILES_DIR=. $(DBT) build --event-time-start 2026-08-10 --event-time-end 2026-08-17
+	cd dbt_project && DBT_PROFILES_DIR=. "$(DBT)" build --event-time-start 2026-08-10 --event-time-end 2026-08-17
 
 parity: ## dbt track: same Bronze in -> same checksum out (lite vs dbt)
 	@$(PY) -m scripts.parity
