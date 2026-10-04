@@ -16,10 +16,10 @@ checksum nào lệch) — không phải cách sửa.
 
 | | Lỗi Silver | Lỗi late data | Lỗi xoá (CDC) |
 |---|---|---|---|
-| **Triệu chứng** | | | |
-| **Nguyên nhân gốc** | | | |
-| **Cách sửa** (file, vài dòng) | | | |
-| **Khái niệm trên slide** | | | |
+| **Triệu chứng** | `test_silver_tickets_one_row_per_ticket` và `test_silver_tickets_latest_state_wins` fail; `silver_tickets` có 24 dòng thay vì 12; T-91 có 3 hàng với trạng thái cũ/mới cùng xuất hiện thay vì trạng thái cuối `high / closed / bug`. | | |
+| **Nguyên nhân gốc** | `upsert_silver_tickets` chỉ dedup CDC changes trong nội bộ một batch bằng `row_number()`, rồi dùng `INSERT INTO` vào `silver_tickets`. Qua nhiều batch, các bản ghi mới bị chèn thêm thay vì upsert theo khoá `ticket_id`, và không dùng thứ tự LSN để bảo vệ trạng thái khi replay batch cũ. | | |
+| **Cách sửa** (file, vài dòng) | Sửa [pipeline/silver.py](file:///home/ducanh/Documents/AI20K/Lab/Phase%202/Day%202/K4-Track02-Day17-Data-Pipeline-Engineering/pipeline/silver.py): thay `INSERT INTO` bằng `MERGE INTO silver_tickets AS t USING _latest_changes AS s ON t.ticket_id = s.ticket_id WHEN MATCHED AND s._lsn > t._lsn THEN UPDATE SET ... WHEN NOT MATCHED THEN INSERT VALUES (...)`. | | |
+| **Khái niệm trên slide** | Keyed MERGE (Upsert theo khoá tự nhiên `ticket_id`) kết hợp LSN Guard (kiểm tra thứ tự Log Sequence Number để đảm bảo Idempotency khi replay batch cũ). | | |
 
 ## 2. Các con số
 
@@ -29,7 +29,7 @@ checksum nào lệch) — không phải cách sửa.
 
 ## 3. Lựa chọn công cụ / kỹ thuật (mỗi dòng một câu "vì sao")
 
-- MERGE theo khoá cho `silver_tickets`, overwrite-partition cho `gold_feature_daily`:
+- MERGE theo khoá cho `silver_tickets`, overwrite-partition cho `gold_feature_daily`: `silver_tickets` biểu diễn thực thể có khoá tự nhiên (`ticket_id`) cập nhật từng dòng theo thứ tự CDC (`_lsn`), còn `gold_feature_daily` là bảng số đo tổng hợp theo ngày nên ghi đè toàn bộ phân vùng (partition) của ngày đó khi có dữ liệu đến muộn.
 - Tombstone thay vì xoá hẳn hàng trong Silver:
 - Snapshot training dựng lại từ Bronze "as of" ngày đó, không sửa snapshot cũ:
 - DuckDB (lite) / dbt (track dbt) cho bài toán cỡ này, chứ không phải Spark:
